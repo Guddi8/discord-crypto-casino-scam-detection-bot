@@ -1,4 +1,4 @@
-import cv2, pdqhash, time, json
+import cv2, pdqhash, time, os
 import numpy as np
 import discord
 from discord.ext import commands
@@ -16,7 +16,7 @@ bot = commands.AutoShardedBot(
 last_status_update = 0
 
 with open("hashes.txt", "r") as f:
-    hashes = json.load(f)
+    hashes = f.read().splitlines()
 
 async def pdq_hash(attachment):
     img_bytes = await attachment.read()
@@ -89,4 +89,4 @@ async def on_message(message):
                 return
 
 
-bot.run("token")
+bot.run(os.environ["ambc_token"])
