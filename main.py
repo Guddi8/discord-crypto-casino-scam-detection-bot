@@ -3,7 +3,12 @@ import numpy as np
 import discord
 from discord.ext import commands
 import logging
+from dotenv import load_dotenv
 
+
+load_dotenv()
+
+logger = logging.getLogger('discord')
 
 bot = commands.Bot(
     command_prefix="h",
@@ -14,10 +19,6 @@ bot = commands.Bot(
     member_cache_flags=discord.MemberCacheFlags.none(),
     allowed_mentions=discord.AllowedMentions.none(),
 )
-
-
-logger = logging.getLogger('discord')
-
 
 with open("hashes.txt", "r") as f:
     hashes = f.read().splitlines()
@@ -99,4 +100,4 @@ async def on_message(message):
                 return
 
 
-bot.run(os.environ["ambc_token"])
+bot.run(os.getenv("BOT_TOKEN"))
