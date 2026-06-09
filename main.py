@@ -2,8 +2,10 @@ import cv2, pdqhash, time, os
 import numpy as np
 import discord
 from discord.ext import commands
+import logging
 
-bot = commands.AutoShardedBot(
+
+bot = commands.Bot(
     command_prefix="h",
     help_command=None,
     chunk_guilds_at_startup=False,
@@ -13,10 +15,13 @@ bot = commands.AutoShardedBot(
     allowed_mentions=discord.AllowedMentions.none(),
 )
 
-last_status_update = 0
+
+logger = logging.getLogger('discord')
+
 
 with open("hashes.txt", "r") as f:
     hashes = f.read().splitlines()
+
 
 async def pdq_hash(attachment):
     img_bytes = await attachment.read()
@@ -29,52 +34,53 @@ async def pdq_hash(attachment):
     bytes_arr = np.packbits(padded.reshape(-1, 8), axis=1, bitorder='big').flatten()
     return str(bytes_arr.tobytes().hex())
 
+
 def hamming(a, b):
     a = int(a, 16)
     b = int(b, 16)
     return (a ^ b).bit_count()
 
 
-@bot.event
-async def on_guild_join(guild):
-    def verify(ch):
-        return ch and ch.permissions_for(guild.me).send_messages
+def verify_channel_perms(guild, ch):
+    return ch and ch.permissions_for(guild.me).send_messages
 
+
+def find_bot_channel(guild):
     def find(patt, channels):
         for i in channels:
             if patt in i.name:
                 return i
+    channel_names = ['scam-bot', 'log', 'bot', 'moderator', 'commands']
+    for name in channel_names:
+        channel = find(name, guild.text_channels)
+        if verify_channel_perms(guild, channel):
+            return channel
+    return None
 
-    ch = find("bot", guild.text_channels)
-    if not verify(ch):
-        ch = find("commands", guild.text_channels)
-    if not verify(ch):
-        ch = find("general", guild.text_channels)
 
-    found = False
-    if not verify(ch):
+@bot.event
+async def on_guild_join(guild):
+    channel = find_bot_channel(guild)
+    if not channel:
         for ch in guild.text_channels:
-            if verify(ch):
-                found = True
+            if verify_channel_perms(guild, ch):
+                channel = ch
                 break
-        if not found:
-            ch = guild.owner
 
     try:
-        if ch.permissions_for(guild.me).send_messages:
-            await ch.send(
-                "Thanks for adding me!\nI will automatically detect and delete crypto scam images.\nTry sending [this one](<https://girl.taxi/cryptoexample>) to test!"
-            )
-    except Exception:
-        pass
+        await channel.send(
+            'Thanks for adding me!\n' \
+            'I will automatically detect and delete crypto scam images.\n' \
+            'Try sending [this one](<https://girl.taxi/cryptoexample>) to test!'
+        )
+    except Exception as e:
+        logger.exception(e)
+
 
 @bot.event
 async def on_message(message):
-    global last_status_update
-    if last_status_update + 300 < time.time():
-        await bot.change_presence(activity=discord.CustomActivity(name=f"nuking scams in {len(bot.guilds):,} servers"))
-        last_status_update = time.time()
     if message.attachments and not message.author.bot and not message.webhook_id:
+        filenames = [f'`{att.filename}`' for att in message.attachments]
         for att in message.attachments:
             if "image" not in att.content_type:
                 continue
@@ -83,9 +89,13 @@ async def on_message(message):
             if min(distances) < 50:
                 await message.delete()
                 try:
-                    await message.channel.send(f"Deleted Crypto Casino Scam images by {message.author.mention}.")
-                except Exception:
-                    pass
+                    channel = find_bot_channel(message.guild) or message.channel
+                    await channel.send(
+                        f'Deleted Crypto Casino Scam images by {message.author.mention} in {message.channel.mention}.\n' \
+                        f'-# Attached filenames: {", ".join(filenames)}'
+                    )
+                except Exception as e:
+                    logger.exception(e)
                 return
 
 
